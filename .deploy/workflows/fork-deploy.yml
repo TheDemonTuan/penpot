@@ -1,0 +1,148 @@
+name: Fork source deployment
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: penpot-production
+  queue: max
+  cancel-in-progress: false
+jobs:
+  fence:
+    if: github.repository == 'TheDemonTuan/penpot' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: test "$GITHUB_REPOSITORY" = TheDemonTuan/penpot && test "$GITHUB_REF" = refs/heads/main
+  source-scan:
+    needs: fence
+    permissions:
+      contents: read
+      packages: read
+    uses: TheDemonTuan/vps-deploy/.github/workflows/security-trivy.yml@PLATFORM_SHA
+    with:
+      app: penpot
+      source-sha: ${{ github.sha }}
+      platform-ref: PLATFORM_SHA
+      config: .deploy/app.yml
+      scan-mode: source
+      vuln-severity: HIGH,CRITICAL
+  build:
+    needs: source-scan
+    permissions:
+      contents: read
+      packages: write
+    uses: TheDemonTuan/vps-deploy/.github/workflows/build-penpot.yml@PLATFORM_SHA
+    with:
+      app: penpot
+      source-sha: ${{ github.sha }}
+      platform-ref: PLATFORM_SHA
+      config: .deploy/app.yml
+  scan-frontend:
+    needs: build
+    permissions:
+      contents: read
+      packages: read
+    uses: TheDemonTuan/vps-deploy/.github/workflows/security-trivy.yml@PLATFORM_SHA
+    with:
+      app: penpot
+      source-sha: ${{ github.sha }}
+      platform-ref: PLATFORM_SHA
+      config: .deploy/app.yml
+      scan-mode: image
+      image-role: frontend
+      image-ref: ${{ fromJSON(needs.build.outputs.images).frontend }}
+      platform: linux/arm64
+      vuln-severity: HIGH,CRITICAL
+  scan-backend:
+    needs: build
+    permissions:
+      contents: read
+      packages: read
+    uses: TheDemonTuan/vps-deploy/.github/workflows/security-trivy.yml@PLATFORM_SHA
+    with:
+      app: penpot
+      source-sha: ${{ github.sha }}
+      platform-ref: PLATFORM_SHA
+      config: .deploy/app.yml
+      scan-mode: image
+      image-role: backend
+      image-ref: ${{ fromJSON(needs.build.outputs.images).backend }}
+      platform: linux/arm64
+      vuln-severity: HIGH,CRITICAL
+  scan-exporter:
+    needs: build
+    permissions:
+      contents: read
+      packages: read
+    uses: TheDemonTuan/vps-deploy/.github/workflows/security-trivy.yml@PLATFORM_SHA
+    with:
+      app: penpot
+      source-sha: ${{ github.sha }}
+      platform-ref: PLATFORM_SHA
+      config: .deploy/app.yml
+      scan-mode: image
+      image-role: exporter
+      image-ref: ${{ fromJSON(needs.build.outputs.images).exporter }}
+      platform: linux/arm64
+      vuln-severity: HIGH,CRITICAL
+  scan-mcp:
+    needs: build
+    permissions:
+      contents: read
+      packages: read
+    uses: TheDemonTuan/vps-deploy/.github/workflows/security-trivy.yml@PLATFORM_SHA
+    with:
+      app: penpot
+      source-sha: ${{ github.sha }}
+      platform-ref: PLATFORM_SHA
+      config: .deploy/app.yml
+      scan-mode: image
+      image-role: mcp
+      image-ref: ${{ fromJSON(needs.build.outputs.images).mcp }}
+      platform: linux/arm64
+      vuln-severity: HIGH,CRITICAL
+  deploy:
+    needs: [build, scan-frontend, scan-backend, scan-exporter, scan-mcp]
+    if: vars.PENPOT_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: production
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: ${{ needs.build.outputs.release-artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/penpot-release
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: TheDemonTuan/vps-deploy
+          ref: PLATFORM_SHA
+          path: release-platform
+          persist-credentials: false
+      - name: Bind same-run release evidence before SSH
+        id: release
+        env:
+          EXPECTED_IMAGES: ${{ needs.build.outputs.images }}
+          PLATFORM_REF: PLATFORM_SHA
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3-yaml
+          python3 release-platform/scripts/validate-penpot-release.py "$RUNNER_TEMP/penpot-release/penpot-release-$GITHUB_SHA.json"
+      - uses: TheDemonTuan/vps-deploy/.github/actions/deploy@PLATFORM_SHA
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        with:
+          app: penpot
+          host: oracle-main
+          operation: deploy
+          component: app
+          source-sha: ${{ github.sha }}
+          platform-ref: PLATFORM_SHA
+          config: .deploy/app.yml
+          images: ${{ steps.release.outputs.images }}

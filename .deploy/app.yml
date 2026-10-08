@@ -1,0 +1,12 @@
+version: 1
+app: penpot
+strategy: penpot
+images:
+  frontend: ghcr.io/thedemontuan/penpot-frontend
+  backend: ghcr.io/thedemontuan/penpot-backend
+  exporter: ghcr.io/thedemontuan/penpot-exporter
+  mcp: ghcr.io/thedemontuan/penpot-mcp
+platform: linux/arm64
+runtime: {port: 8080}
+health: {path: /readyz, timeout_seconds: 180}
+route: {timeout_seconds: 30}

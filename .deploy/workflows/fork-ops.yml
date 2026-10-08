@@ -1,0 +1,43 @@
+name: Fork deployment operations
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        required: true
+        type: choice
+        options: [status, reconcile]
+        default: status
+permissions:
+  contents: read
+concurrency:
+  group: penpot-production
+  queue: max
+  cancel-in-progress: false
+jobs:
+  operation:
+    if: github.repository == 'TheDemonTuan/penpot' && github.ref == 'refs/heads/main' && vars.PENPOT_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: production
+    steps:
+      - name: Fence repository branch and operation before transport
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == TheDemonTuan/penpot && "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$OPERATION" == status || "$OPERATION" == reconcile ]]
+      - uses: TheDemonTuan/vps-deploy/.github/actions/deploy@PLATFORM_SHA
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        with:
+          app: penpot
+          host: oracle-main
+          operation: ${{ inputs.operation }}
+          component: app
+          source-sha: ${{ github.sha }}
+          platform-ref: PLATFORM_SHA
+          config: .deploy/app.yml
