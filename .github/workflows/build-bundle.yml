@@ -42,6 +42,7 @@ concurrency:
 jobs:
   # ── 1. Decide whether there is anything to build ───────────────────────
   check:
+    if: ${{ github.repository == 'penpot/penpot' }}
     name: Check current bundle
     runs-on: penpot-standar-runner
     timeout-minutes: 10
@@ -112,7 +113,7 @@ jobs:
     runs-on: penpot-standar-runner
     timeout-minutes: 90
     needs: check
-    if: needs.check.outputs.exists == 'false'
+    if: ${{ github.repository == 'penpot/penpot' && (needs.check.outputs.exists == 'false') }}
 
     steps:
       - name: Checkout repository
@@ -163,7 +164,7 @@ jobs:
     runs-on: penpot-standar-runner
     timeout-minutes: 5
     needs: [check, build]
-    if: failure()
+    if: ${{ github.repository == 'penpot/penpot' && (failure()) }}
 
     steps:
       - name: Notify Mattermost

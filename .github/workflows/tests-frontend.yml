@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   test-frontend:
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ github.repository == 'penpot/penpot' && (!github.event.pull_request.draft) }}
     name: "Frontend Tests"
     runs-on: penpot-extended-runner
     container:

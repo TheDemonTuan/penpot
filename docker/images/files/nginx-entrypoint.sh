@@ -84,4 +84,11 @@ export PENPOT_INTERNAL_RESOLVER=${PENPOT_INTERNAL_RESOLVER:-$PENPOT_DEFAULT_INTE
 envsubst "\$PENPOT_INTERNAL_RESOLVER" \
          < /tmp/resolvers.conf.template > /etc/nginx/overrides/http.d/resolvers.conf
 
-exec "$@";
+case "${1:-}" in
+  nginx|/usr/sbin/nginx)
+    exec /usr/bin/python3 /opt/penpot/nginx-safe-run.py "$@"
+    ;;
+  *)
+    exec "$@"
+    ;;
+esac

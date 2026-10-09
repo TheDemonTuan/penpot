@@ -53,6 +53,7 @@ env:
 jobs:
   # ── 1. Resolve the build key and check the whole set at once ───────────
   prepare:
+    if: ${{ github.repository == 'penpot/penpot' }}
     name: Prepare
     runs-on: penpot-standar-runner
     timeout-minutes: 15
@@ -139,7 +140,7 @@ jobs:
     runs-on: penpot-standar-runner
     timeout-minutes: 60
     needs: prepare
-    if: needs.prepare.outputs.exists == 'false'
+    if: ${{ github.repository == 'penpot/penpot' && (needs.prepare.outputs.exists == 'false') }}
     strategy:
       fail-fast: true
       # 4 runner slots are available for build jobs on this server; cap the
@@ -245,6 +246,7 @@ jobs:
 
   # ── 3a. Move the branch tags of ALL images together (fresh build) ──────
   promote:
+    if: ${{ github.repository == 'penpot/penpot' }}
     name: Promote image set
     runs-on: penpot-standar-runner
     timeout-minutes: 10
@@ -306,7 +308,7 @@ jobs:
     runs-on: penpot-standar-runner
     timeout-minutes: 10
     needs: prepare
-    if: needs.prepare.outputs.exists == 'true'
+    if: ${{ github.repository == 'penpot/penpot' && (needs.prepare.outputs.exists == 'true') }}
 
     steps:
       - name: Set common environment variables
@@ -350,7 +352,7 @@ jobs:
     runs-on: penpot-standar-runner
     timeout-minutes: 5
     needs: [prepare, build, promote, retag]
-    if: failure()
+    if: ${{ github.repository == 'penpot/penpot' && (failure()) }}
 
     steps:
       - name: Notify Mattermost

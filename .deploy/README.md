@@ -38,6 +38,16 @@ Public Debian, nginx, and Node base images are pinned to OCI index digests
 that include `linux/arm64`. Apt updates still require network access and
 change over time. Pinning a base does not replace a final-image scan.
 
+The frontend wraps only its nginx command with `nginx-safe-run.py`. Real nginx
+upstream-failure reproduction exposed query tokens in stderr even though the
+access format omits queries/referrers. The wrapper drains stderr, strips query
+and fragment data from request targets/URLs, and redacts credential values while
+keeping path, severity and upstream cause. It forwards TERM/INT/QUIT, reaps nginx
+and preserves its exit status. Invalid sanitization or a line over 1 MiB stops
+the child and fails without printing raw input. Other command overrides keep
+their existing dispatch. Native ARM64 CI must still prove the exact frontend
+image's success/404/refused/timeout behavior and shared edge log safety.
+
 ## Required work before activation
 
 The platform checkout now contains the strict four-digest request contract,
@@ -89,11 +99,48 @@ The reusable platform workflow builds and smokes on native ARM64 without
 package-write permission. It transfers the exact tested images by a same-run
 artifact ID and checksum to a separate publication job. That job verifies all
 four source labels, ARM64 identities and non-root users before pushing SHA tags.
-It rejects private packages and incomplete or ambiguous digest maps. Its release
-artifact contains the source SHA, platform SHA, ARM64 platform and four digests.
-Build and smoke still need to pass on a real runner. All four published runtime
-images must pass the image security gates before SSH deploy. Only immutable
-digests from that successful run may reach the deploy controller.
+It pushes and resolves all four immutable digests before starting anonymous
+checks, so a first publication creates every package even if GHCR defaults them
+to private. Push, malformed/ambiguous digest and anonymous-check failures retain
+their original error codes and cannot create a release artifact. An anonymous
+failure alone does not distinguish private visibility from a network failure.
+The CI summary provides visibility guidance without registry responses, auth
+URLs or credentials. If the packages are private, change **all four** packages
+to Public at <https://github.com/users/TheDemonTuan/packages>, then rerun only the
+failed publication job using the build artifact from that same run. If it has
+expired, rerun the complete chain; never combine digests from different runs or
+grant the workflow an admin PAT. The strict release artifact remains
+`schemaVersion/sourceSha/platformRef/platform/images`, with four immutable refs.
+
+The platform's `scripts/write-penpot-proof.py --directory "$RUNNER_TEMP/penpot-proof"`
+records evidence separately from release publication. It reads `SOURCE_SHA`,
+`PLATFORM_REF`, `GITHUB_RUN_ID` and `GITHUB_RUN_ATTEMPT`; the two run identifiers
+are decimal strings. `proof.json` contains `schemaVersion: 1`, those exact source,
+platform and run identities, `platform: "linux/arm64"`, and a `files` object
+mapping every evidence-relative path to its full SHA-256. It requires a passing
+source-bound `smoke.json`, identity-bound `lifecycle.json`, and at least one
+sanitized `logs/*.log` (or `runtime.log`). Lifecycle failure reports may still
+be recorded as diagnostic evidence; a proof file is **not** release approval.
+The writer rejects symlinks, unexpected files, oversized/non-UTF-8 evidence,
+raw inspect environment fields, recognizable credentials, private keys and
+credential/query URLs. Report producers must sanitize at collection time; the
+writer rejects suspicious content, never rewrites raw logs into public evidence.
+Never place runtime environments, dumps, keys or raw container inspect output
+in the evidence directory. Existing derived proof is removed before validating
+replacement evidence, so rejection cannot retain a stale manifest.
+
+Native workflow integration must run the lifecycle harness after source smoke
+and before saving source tags, then run the proof writer even after harness
+failure when reports exist. Upload only `proof.json`, `smoke.json`,
+`lifecycle.json`, `logs/*.log` and optional `runtime.log`, only when proof writing
+succeeds, as `penpot-proof-<sourceSha>-<runId>-<runAttempt>` with 30-day retention.
+Do not upload the report directory wholesale. Save/upload the original four
+source tags and continue publication only after successful smoke, lifecycle and
+proof generation. Keep native build `contents: read`, with `packages: write`
+only on the separate publication job. All four published runtime images must
+pass image security gates before SSH deploy. Build, smoke and lifecycle proof
+still need to pass on a real runner; only immutable digests from that successful
+run may reach the deploy controller.
 
 Production still needs a verified native CI release, bootstrap and daily backup
 service installation, plus real container fault and offline restore tests. The platform has
@@ -101,7 +148,9 @@ service/timer definitions for the 20:15 UTC daily backup. They are not installed
 or enabled on the VPS. Installer integration now renders the existing root-only
 wrapper with the verified engine release, action `backup`, and app `penpot`.
 It pauses an existing timer, rejects a running backup, and restores timer/files
-on installation failure. Successful enrollment enables only the Penpot timer.
+on installation failure. Successful enrollment also restores its prior timer
+state; fresh enrollment leaves it disabled/inactive until public readiness,
+a complete production backup and a private ARM64 restore rehearsal pass.
 Image-only rollback
 is not safe. Bootstrap, forced-command SSH, ingress changes, and old OpenDesign
 retirement must wait for the relevant verification gates in the plan.
@@ -121,6 +170,14 @@ queue policy itself, then removes only that setting from temporary linter copies
 The generated workflows retain `queue: max`; all other syntax stays subject to
 normal actionlint checks.
 
+Every job in the 25 upstream workflows requires `github.repository == 'penpot/penpot'`
+as well as its prior condition. This protects the enable-to-disable window,
+including schedules and `pull_request_target`; it does not replace disabling
+those workflows through GitHub. Keep fork Actions disabled during the initial
+push, then enable only `fork-deploy.yml` and `fork-ops.yml`. Do not dispatch an
+upstream workflow to force indexing. Keep `PENPOT_DEPLOY_ENABLED=false` through
+build proof, bootstrap, private restore rehearsal and public Web/export/MCP checks.
+
 Render the templates only after the final platform commit passes CI on `main`:
 
 ```bash
@@ -135,6 +192,14 @@ missing implementation files, failed/missing platform CI, non-main source
 branches, linter errors and conflicting existing fork workflows. Deployment
 binds the downloaded same-run artifact ID, source SHA, platform SHA and complete
 image map to the build outputs before the forced-command SSH transport.
+
+To repin an existing pair, add `--replace-platform-ref <old-40-hex-sha>` while
+rendering the new verified platform SHA on local `main`. Both existing files must
+be regular files and match the current templates rendered at the old SHA exactly.
+A custom edit, missing file, mixed pair or symlink fails before either file changes.
+Both files already at the new SHA are idempotent. Without the flag, the renderer
+keeps its original refusal to replace different content. Do not delete workflows
+to bypass review; lint both candidate files before replacing the pair.
 
 ## Scoped ingress controller
 

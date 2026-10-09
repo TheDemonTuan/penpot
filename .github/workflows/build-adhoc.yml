@@ -22,6 +22,7 @@ on:
 
 jobs:
   build-bundle:
+    if: ${{ github.repository == 'penpot/penpot' }}
     uses: ./.github/workflows/build-bundle.yml
     secrets: inherit
     with:
@@ -29,6 +30,7 @@ jobs:
       force: ${{ inputs.force }}
 
   build-docker:
+    if: ${{ github.repository == 'penpot/penpot' }}
     needs: build-bundle
     uses: ./.github/workflows/build-docker.yml
     secrets: inherit
@@ -39,6 +41,7 @@ jobs:
       force: ${{ inputs.force }}
 
   build-docker-admin-console:
+    if: ${{ github.repository == 'penpot/penpot' }}
     uses: ./.github/workflows/build-docker-admin-console.yml
     secrets: inherit
     with:

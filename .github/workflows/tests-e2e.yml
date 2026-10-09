@@ -89,7 +89,7 @@ concurrency:
 jobs:
   # ── 1. Build the frontend bundle once ──────────────────────────────────
   build-bundle:
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ github.repository == 'penpot/penpot' && (!github.event.pull_request.draft) }}
     name: "Build Integration Bundle"
     runs-on: penpot-extended-runner
     timeout-minutes: 30
@@ -140,7 +140,7 @@ jobs:
 
   # ── 2. Consumers: restore the bundle, never rebuild it ─────────────────
   test-integration:
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ github.repository == 'penpot/penpot' && (!github.event.pull_request.draft) }}
     name: "Integration Tests (${{ matrix.shard }})"
     runs-on: penpot-extended-runner
     timeout-minutes: 40
@@ -218,7 +218,7 @@ jobs:
           retention-days: 3
 
   composable-test-suite:
-    if: ${{ github.event_name != 'workflow_dispatch' && !github.event.pull_request.draft }}
+    if: ${{ github.repository == 'penpot/penpot' && (github.event_name != 'workflow_dispatch' && !github.event.pull_request.draft) }}
     name: "Run composable test suite (mocked backend)"
     runs-on: penpot-extended-runner
     timeout-minutes: 30
@@ -256,7 +256,7 @@ jobs:
         run: pnpm --filter composable-test-suite run test:ci
 
   api-test-suite-mocked:
-    if: ${{ github.event_name != 'workflow_dispatch' && !github.event.pull_request.draft }}
+    if: ${{ github.repository == 'penpot/penpot' && (github.event_name != 'workflow_dispatch' && !github.event.pull_request.draft) }}
     name: "Run Plugin API Test Suite (mocked)"
     runs-on: penpot-extended-runner
     timeout-minutes: 30
@@ -301,7 +301,7 @@ jobs:
 
   # ── 3. Merge the per-shard integration reports ─────────────────────────
   merge-reports:
-    if: ${{ !cancelled() && !github.event.pull_request.draft && needs.test-integration.result != 'skipped' }}
+    if: ${{ github.repository == 'penpot/penpot' && (!cancelled() && !github.event.pull_request.draft && needs.test-integration.result != 'skipped') }}
     name: "Merge Integration Reports"
     runs-on: penpot-extended-runner
     timeout-minutes: 15

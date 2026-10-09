@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   test-library:
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ github.repository == 'penpot/penpot' && (!github.event.pull_request.draft) }}
     name: "Library Tests"
     runs-on: penpot-extended-runner
     container:

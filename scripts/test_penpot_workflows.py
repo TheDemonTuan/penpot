@@ -103,6 +103,71 @@ class PenpotWorkflowRendering(unittest.TestCase):
                     renderer.install(root, Path(home) / 'platform', 'c' * 40, 'actionlint')
             self.assertFalse((root / '.github').exists())
 
+    def test_repin_requires_exact_old_pair_and_is_idempotent_at_new_ref(self):
+        renderer = self.module()
+        old, new = 'a' * 40, 'b' * 40
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            directory = root / '.github/workflows'
+            directory.mkdir(parents=True)
+            for name, content in renderer.render(old).items():
+                (directory / name).write_text(content, encoding='ascii')
+            with mock.patch.object(renderer, 'verify_platform'), \
+                 mock.patch.object(renderer, 'command', side_effect=lambda argv: 'main' if argv[0] == 'git' else ''):
+                renderer.install(root, root / 'platform', new, 'actionlint', old)
+                self.assertEqual({p.name: p.read_text() for p in directory.iterdir()}, renderer.render(new))
+                renderer.install(root, root / 'platform', new, 'actionlint', old)
+                self.assertEqual({p.name: p.read_text() for p in directory.iterdir()}, renderer.render(new))
+
+    def test_repin_tamper_partial_pair_symlink_or_mixed_pin_never_writes_either_file(self):
+        renderer = self.module()
+        old, new = 'a' * 40, 'b' * 40
+        for fault in ('tamper', 'partial', 'symlink', 'mixed', 'directory'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as home:
+                root = Path(home)
+                directory = root / '.github/workflows'
+                directory.mkdir(parents=True)
+                for name, content in renderer.render(old).items():
+                    (directory / name).write_text(content, encoding='ascii')
+                target = directory / 'fork-ops.yml'
+                if fault == 'tamper':
+                    target.write_text(target.read_text() + '# custom change\n')
+                elif fault == 'mixed':
+                    target.write_text(renderer.render(new)[target.name])
+                else:
+                    target.unlink()
+                    if fault == 'symlink':
+                        external = root / 'external.yml'
+                        external.write_text(renderer.render(old)[target.name])
+                        target.symlink_to(external)
+                    elif fault == 'directory':
+                        target.mkdir()
+                before = {p.name: p.read_bytes() for p in directory.iterdir() if p.is_file()}
+                with mock.patch.object(renderer, 'verify_platform'), \
+                     mock.patch.object(renderer, 'command', side_effect=lambda argv: 'main' if argv[0] == 'git' else ''), \
+                     self.assertRaisesRegex(renderer.RenderFailure, 'WORKFLOW_EXISTS_WITH_DIFFERENT_CONTENT'):
+                    renderer.install(root, root / 'platform', new, 'actionlint', old)
+                self.assertEqual({p.name: p.read_bytes() for p in directory.iterdir() if p.is_file()}, before)
+
+    def test_repin_without_flag_or_failed_ci_never_changes_existing_pair(self):
+        renderer = self.module()
+        old, new = 'a' * 40, 'b' * 40
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            directory = root / '.github/workflows'
+            directory.mkdir(parents=True)
+            for name, content in renderer.render(old).items():
+                (directory / name).write_text(content, encoding='ascii')
+            before = {p.name: p.read_bytes() for p in directory.iterdir()}
+            with mock.patch.object(renderer, 'verify_platform'), \
+                 mock.patch.object(renderer, 'command', side_effect=lambda argv: 'main' if argv[0] == 'git' else ''), \
+                 self.assertRaisesRegex(renderer.RenderFailure, 'WORKFLOW_EXISTS_WITH_DIFFERENT_CONTENT'):
+                renderer.install(root, root / 'platform', new, 'actionlint')
+            with mock.patch.object(renderer, 'verify_platform', side_effect=renderer.RenderFailure('PLATFORM_CI_REQUIRED')), \
+                 self.assertRaisesRegex(renderer.RenderFailure, 'PLATFORM_CI_REQUIRED'):
+                renderer.install(root, root / 'platform', new, 'actionlint', old)
+            self.assertEqual({p.name: p.read_bytes() for p in directory.iterdir()}, before)
+
 
 if __name__ == '__main__':
     unittest.main()
