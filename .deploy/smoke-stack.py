@@ -17,8 +17,8 @@ import yaml
 
 ROLES = ('frontend', 'backend', 'exporter', 'mcp')
 STORES = {
-    'penpot-postgres': 'postgres:15@sha256:7e2070cf6ad06fb3cbbd141b1bafbb7fd5bb63e2b6001e6daf34448eb555e4b3',
-    'penpot-valkey': 'valkey/valkey:8.1@sha256:640c5e62cea04b6d6f2084232651d0cc70362d31f4f805e7be94dbed6855e8f2',
+    'penpot-postgres': 'postgres@sha256:7e2070cf6ad06fb3cbbd141b1bafbb7fd5bb63e2b6001e6daf34448eb555e4b3',
+    'penpot-valkey': 'valkey/valkey@sha256:640c5e62cea04b6d6f2084232651d0cc70362d31f4f805e7be94dbed6855e8f2',
 }
 SCOPE = re.compile(r'penpot-smoke-[0-9]+-[0-9]+-[0-9a-f]{32}')
 
