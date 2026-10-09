@@ -54,6 +54,38 @@ manage.sh script:
 ./manage.sh drop-devenv                     # removes containers (data volumes preserved)
 ```
 
+### Runtime user and localhost TLS
+
+After changing the local Docker sources, rebuild with
+`./manage.sh build-devenv --local` before starting the environment. The main
+container no longer needs Docker's `privileged` mode. Its image defaults to
+`penpot`; Nginx, Caddy, tmux, build commands, and tool updates run as that user.
+
+Startup uses one root-owned, restricted sudo helper to map `EXTERNAL_UID` to
+the host developer's UID and repair home-volume/toolchain ownership. Only
+UIDs 1–2147483647 are accepted; root and an existing different account with
+the requested UID are rejected. The helper does not traverse the bind-mounted `penpot`
+source directory and drops privileges before running the requested command.
+It is not a general-purpose root shell. Startup therefore requires container
+setuid/sudo support; do not set `no-new-privileges` on the whole container or
+override its user to root. The helper applies `no-new-privileges` after setup.
+Host sysctl changes, when needed, remain a separate host-admin operation.
+
+Each workspace generates its own self-signed localhost certificate and
+private key on first startup, under
+`/home/penpot/.config/penpot/tls/` in its persistent home volume. No private
+key is stored in Git or baked into the image. The key is mode 0600 and the
+TLS directory is mode 0700. The certificate covers `localhost`, `127.0.0.1`,
+and `::1` and expires after one year. Use only the public `selfsigned.crt`
+when trusting the certificate on your development machine; never copy the
+private key into the checkout. Stop the workspace and remove both generated
+files when renewing the identity; the next startup generates a new pair,
+which must be trusted again. The HTTP endpoint remains available on port
+3450 for clients that cannot use self-signed HTTPS.
+Remove any previously installed trust for the old, repository-shipped
+development certificate: its private key was public and is no longer used.
+
+
 ### Agentic Mode
 
 The `--agentic` flag enables additional features for AI-assisted development.
@@ -244,7 +276,7 @@ current window.
 For more info: https://tmuxcheatsheet.com/
 
 It may take a minute or so, but once all of the services have started, you can
-connect to penpot by browsing to http://localhost:3449 .
+connect to penpot by browsing to https://localhost:3449 .
 
 <!-- ## Inside the tmux session -->
 

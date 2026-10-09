@@ -4,7 +4,7 @@
 
 localhost:3449 {
 	reverse_proxy localhost:4449
-	tls /home/selfsigned.crt /home/selfsigned.key
+	tls /home/penpot/.config/penpot/tls/selfsigned.crt /home/penpot/.config/penpot/tls/selfsigned.key
 	header -Strict-Transport-Security
 }
 

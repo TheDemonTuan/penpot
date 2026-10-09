@@ -87,4 +87,7 @@ ENV LANG='C.UTF-8' \
 
 COPY --from=build /opt/imagick /opt/imagick
 
+# The bundle is read-only; ImageMagick uses /tmp for transient pixel caches.
+USER 1001:1001
+
 ENTRYPOINT ["/opt/imagick/bin/magick"]

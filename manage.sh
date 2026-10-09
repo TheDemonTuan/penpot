@@ -715,28 +715,24 @@ function start-instance {
     local container deadline
     container=$(devenv-main-container "$instance")
     deadline=$(( SECONDS + 30 ))
-    while ! docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -q true; do
+    while ! docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -q true || \
+          ! docker exec --user penpot "$container" test -f /tmp/penpot-devenv-ready 2>/dev/null; do
         [[ $SECONDS -ge $deadline ]] && {
-            echo "[${instance}] main container did not reach Running within 30s" >&2
+            echo "[${instance}] main container did not finish nonroot setup within 30s" >&2
             return 1
         }
         sleep 1
     done
 
-    # Ensure /home/penpot is writable by the penpot user before touching
-    # any files inside it (e.g. .gitconfig). start-tmux.sh also does this
-    # but runs later asynchronously, so the container may still be root-owned
-    # from a fresh volume mount at this point.
-    docker exec "$container" sudo chown penpot:users /home/penpot 2>/dev/null || true
 
     # Seed the container's global git config from the values resolved on the
     # host so commits made inside the devenv carry a real author/committer. Empty
     # values are skipped — the host-identity warning is the caller's job.
     if [[ -n "$git_user_name" ]]; then
-        docker exec "$container" sudo -u penpot git config --global user.name "$git_user_name"
+        docker exec --user penpot "$container" git config --global user.name "$git_user_name"
     fi
     if [[ -n "$git_user_email" ]]; then
-        docker exec "$container" sudo -u penpot git config --global user.email "$git_user_email"
+        docker exec --user penpot "$container" git config --global user.email "$git_user_email"
     fi
 
     # Detached tmux so callers don't block on attach. Agentic mode adds the
@@ -749,10 +745,10 @@ function start-instance {
             -e SERENA_CONTEXT="$serena_context"
         )
     fi
-    docker exec -d \
+    docker exec -d --user penpot \
         "${tmux_env[@]}" \
-        "$container" \
-        sudo -EH -u penpot PENPOT_PLUGIN_DEV="${PENPOT_PLUGIN_DEV:-}" /home/start-tmux.sh
+        -e PENPOT_PLUGIN_DEV="${PENPOT_PLUGIN_DEV:-}" \
+        "$container" /home/start-tmux.sh
 }
 
 # Stop and remove one instance's containers without touching its volumes or
@@ -924,7 +920,7 @@ function run-devenv {
         container=$(devenv-main-container "$target")
         echo "[$target] waiting for tmux session..."
         local deadline=$(( SECONDS + 120 ))
-        while ! docker exec "$container" sudo -EH -u penpot tmux has-session -t penpot 2>/dev/null; do
+        while ! docker exec --user penpot "$container" tmux has-session -t penpot 2>/dev/null; do
             [[ $SECONDS -ge $deadline ]] && {
                 echo "[$target] tmux session did not appear within 120s" >&2
                 return 1
@@ -932,9 +928,9 @@ function run-devenv {
             sleep 2
         done
         echo "[$target] attaching to tmux session..."
-        docker exec -ti \
+        docker exec -ti --user penpot \
             "${extra_env_args[@]}" \
-            "$container" sudo -EH -u penpot tmux attach -t penpot
+            "$container" tmux attach -t penpot
     fi
 }
 
@@ -960,14 +956,14 @@ function attach-devenv {
     local container
     container=$(devenv-main-container "$instance")
 
-    if ! docker exec "$container" sudo -EH -u penpot tmux has-session -t "$session" 2>/dev/null; then
+    if ! docker exec --user penpot "$container" tmux has-session -t "$session" 2>/dev/null; then
         echo "No tmux session '$session' inside instance '$instance'." >&2
         echo "The session may still be starting (the workspace's startup script runs the" >&2
         echo "project setup before creating it) or it may have been closed. Wait and retry." >&2
         return 1
     fi
 
-    docker exec -ti "$container" sudo -EH -u penpot tmux attach -t "$session"
+    docker exec -ti --user penpot "$container" tmux attach -t "$session"
 }
 
 # Launch an AI coding agent against one parallel devenv workspace with the
@@ -1186,7 +1182,7 @@ function build {
            -e SHADOWCLJS_EXTRA_PARAMS=$SHADOWCLJS_EXTRA_PARAMS \
            -e JAVA_OPTS="$JAVA_OPTS" \
            -w /home/penpot/penpot/$1 \
-           $DEVENV_IMGNAME:$DEVENV_TAG sudo -EH -u penpot ./scripts/$script $version
+           $DEVENV_IMGNAME:$DEVENV_TAG ./scripts/$script $version
 
     echo ">> build end: $1"
 }

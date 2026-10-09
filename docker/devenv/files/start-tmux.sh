@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-sudo chown penpot:users /home/penpot
-
 cd ~;
 
 source ~/.bashrc
@@ -74,8 +72,8 @@ fi
 
 if [ "${SERENA_ENABLED:-false}" = "true" ]; then
     if [ -n "${SERENA_UPDATE_VERSION}" ]; then
-        # update Serena (use sudo since the initial Serena installation is global; see Dockerfile)
-        sudo -E uv tool install -p 3.13 serena-agent@${SERENA_UPDATE_VERSION} --prerelease=allow
+        # Runtime tool directories belong to the developer, not root.
+        uv tool install -p 3.13 serena-agent@${SERENA_UPDATE_VERSION} --prerelease=allow
     fi
     tmux new-window -t "$PENPOT_TMUX_SESSION:5" -n 'serena'
     tmux select-window -t "$PENPOT_TMUX_SESSION:5"
