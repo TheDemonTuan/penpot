@@ -35,7 +35,7 @@ RUN set -ex; \
 
 RUN set -ex; \
     apt-get -qq update; \
-    apt-get -qqy install \
+    apt-get -qqy --no-install-recommends install \
         gconf-service \
         libasound2 \
         libatk1.0-0 \
@@ -111,7 +111,6 @@ ENV PATH="/usr/lib/jvm/openjdk16/bin:/usr/local/nodejs/bin:$PATH" \
     PENPOT_SMTP_HOST=localhost \
     PENPOT_SMTP_PORT=1025 \
     PENPOT_SMTP_USER= \
-    PENPOT_SMTP_PASSWORD= \
     PENPOT_SMTP_SSL=false \
     PENPOT_SMTP_TLS=false \
     PENPOT_SMTP_DEFAULT_REPLY_TO=no-reply@example.com \

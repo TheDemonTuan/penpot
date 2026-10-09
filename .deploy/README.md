@@ -1,9 +1,9 @@
 # Source deployment preparation
 
 This directory contains the native source build and disposable stack smoke
-scripts. The platform checkout now has a reusable build/publication workflow,
-but the fork's complete autodeploy pipeline is not installed or activated.
-These local changes are not evidence of a working production deployment.
+scripts. The fork has the two guarded workflows pinned to the reviewed platform
+release. Source scanning runs before native builds; SSH deployment stays disabled
+until the production gates pass. Installed workflows do not prove deployment.
 
 ## Build contract
 
@@ -47,6 +47,28 @@ and preserves its exit status. Invalid sanitization or a line over 1 MiB stops
 the child and fails without printing raw input. Other command overrides keep
 their existing dispatch. Native ARM64 CI must still prove the exact frontend
 image's success/404/refused/timeout behavior and shared edge log safety.
+
+## Source security gate
+
+Keep the source HIGH/CRITICAL gate and all four image gates enabled. Regenerate
+dependency locks with the repository-pinned pnpm after updating affected packages;
+use frozen installs before building. Plugins use the workspace pnpm lock, not the
+removed, stale `plugins-runtime/package-lock.json`.
+
+`braces@3.0.3` remains blocked by `CVE-2026-93687`: no patched release exists at
+the time of this cutover. Stable Eleventy, nodemon and stylelint dependency chains
+still require it. Do not add an ignore, relabel a local patch as a fixed version,
+or replace the stable documentation toolchain with an unverified alpha release.
+A published fix or a verified compatible dependency migration is required before
+the full source/build/runtime/publication chain can pass.
+
+Devenv now runs as the mapped nonroot developer user after restricted ownership
+setup. Its TLS key is generated in the home volume, not shipped in the image;
+see the development guide for trust and renewal. Verify the actual Docker startup
+and four native bundle builds on the authorized disposable ARM64 runner. Shell
+checks and local TLS generation do not replace that runtime proof.
+
+
 
 ## Required work before activation
 

@@ -1,8 +1,7 @@
-Defaults        env_reset
-Defaults        mail_badpass
-#Defaults        secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
-root    ALL=(ALL:ALL) ALL
-penpot ALL=(ALL) NOPASSWD:ALL
-
-%admin ALL=(ALL) ALL
-%sudo   ALL=(ALL:ALL) ALL
+Defaults env_reset
+Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Defaults env_keep += "PENPOT_* AWS_* SERENA_* UV_* JAVA_HOME JAVA_OPTS CARGO_HOME RUSTUP_HOME LANG LC_ALL COLORTERM TERM BUILD_* SHADOWCLJS_EXTRA_PARAMS SHADOW_SERVER_URL"
+root ALL=(ALL:ALL) ALL
+# No general-purpose root shell: setup validates the UID and drops privileges
+# before running the requested entrypoint command.
+penpot ALL=(root) NOPASSWD: /usr/local/sbin/penpot-devenv-setup

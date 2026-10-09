@@ -458,9 +458,7 @@ RUN set -ex; \
     apt-get -qq update; \
     apt-get -qqy --no-install-recommends install passwd; \
     groupadd -f users; \
-    useradd -u 1000 -m -d /home/penpot -G users -s /bin/bash penpot; \
-    passwd penpot -d; \
-    echo "penpot ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    useradd -u 1000 -m -d /home/penpot -G users -s /bin/bash penpot;
 
 RUN set -ex; \
     apt-get -qq update; \
@@ -550,7 +548,7 @@ RUN set -ex; \
     curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
     echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" >> /etc/apt/sources.list.d/postgresql.list; \
     apt-get -qq update; \
-    apt-get -qqy install postgresql-client-18; \
+    apt-get -qqy --no-install-recommends install postgresql-client-18; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*;
 
@@ -566,14 +564,15 @@ ENV LANG='C.UTF-8' \
     LC_ALL='C.UTF-8' \
     DEBIAN_FRONTEND="noninteractive" \
     JAVA_HOME="/opt/jdk" \
-    CARGO_HOME="/opt/cargo" \
+    CARGO_HOME="/home/penpot/.cargo" \
     RUSTUP_HOME="/opt/rustup" \
     UV_TOOL_DIR="/opt/uv/tools" \
-    UV_TOOL_BIN_DIR="/opt/utils/bin" \
+    UV_TOOL_BIN_DIR="/home/penpot/.local/bin" \
     UV_PYTHON_INSTALL_DIR="/opt/uv/python" \
+    HOME="/home/penpot" \
     SERENA_HOME="/home/penpot/.serena" \
     SERENA_CONTEXT="claude-code" \
-    PATH="/opt/jdk/bin:/opt/gh/bin:/opt/utils/bin:/opt/clojure/bin:/opt/node/bin:/opt/imagick/bin:/opt/cargo/bin:$PATH"
+    PATH="/home/penpot/.cargo/bin:/home/penpot/.local/bin:/opt/jdk/bin:/opt/gh/bin:/opt/utils/bin:/opt/clojure/bin:/opt/node/bin:/opt/imagick/bin:/opt/cargo/bin:$PATH"
 
 COPY --from=penpotapp/imagemagick:7.1.2-27 /opt/imagick /opt/imagick
 COPY --from=setup-jvm /opt/jdk /opt/jdk
@@ -593,18 +592,28 @@ COPY files/nginx.conf /etc/nginx/nginx.conf
 COPY files/nginx-mime.types /etc/nginx/mime.types
 COPY files/phantomjs-mock /usr/bin/phantomjs
 
-COPY files/bashrc         /root/.bashrc
-COPY files/vimrc          /root/.vimrc
-COPY files/tmux.conf      /root/.tmux.conf
+COPY files/bashrc         /usr/local/share/penpot/bashrc
+COPY files/vimrc          /usr/local/share/penpot/vimrc
+COPY files/tmux.conf      /usr/local/share/penpot/tmux.conf
 COPY files/sudoers        /etc/sudoers
 
 COPY files/Caddyfile           /home/
 COPY files/serena_config.yml   /home/serena_config.yml
-COPY files/selfsigned.crt      /home/
-COPY files/selfsigned.key      /home/
 COPY files/start-tmux.sh       /home/start-tmux.sh
 COPY files/entrypoint.sh       /home/entrypoint.sh
 COPY files/init.sh             /home/init.sh
+COPY files/setup-user.sh       /usr/local/sbin/penpot-devenv-setup
+
+RUN set -ex; \
+    apt-get -qq update; \
+    apt-get -qqy --no-install-recommends install openssl util-linux; \
+    rm -rf /var/lib/apt/lists/*; \
+    chmod 0440 /etc/sudoers; \
+    chmod 0755 /usr/local/sbin/penpot-devenv-setup /home/entrypoint.sh /home/init.sh /home/start-tmux.sh; \
+    chown -R penpot:users /home/penpot /opt/rustup /opt/emsdk /opt/uv;
+
+USER penpot
+
 
 ENTRYPOINT ["/home/entrypoint.sh"]
 CMD ["/home/init.sh"]

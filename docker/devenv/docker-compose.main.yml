@@ -9,7 +9,6 @@ volumes:
 
 services:
   main:
-    privileged: true
     image: "penpotapp/devenv:${DEVENV_TAG:-latest}"
     build:
       context: "."
