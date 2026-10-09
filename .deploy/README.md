@@ -20,6 +20,10 @@ It builds `penpotapp/devenv` locally, without pulling the upstream devenv,
 then uses the existing `manage.sh` bundle commands. The build forces WASM
 on and Storybook off. Each run gets its own home/cache volume, which is
 removed on success or failure. Existing volumes are not reused or removed.
+The image's root-owned `/opt/cargo` seed is readable by the mapped developer
+user, including private-mode files unpacked by Cargo. Startup copies it into
+the writable home cache without granting write access to the image seed.
+
 
 The four local images are tagged:
 

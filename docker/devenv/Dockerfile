@@ -610,6 +610,7 @@ RUN set -ex; \
     rm -rf /var/lib/apt/lists/*; \
     chmod 0440 /etc/sudoers; \
     chmod 0755 /usr/local/sbin/penpot-devenv-setup /home/entrypoint.sh /home/init.sh /home/start-tmux.sh; \
+    chmod -R a+rX /opt/cargo; \
     chown -R penpot:users /home/penpot /opt/rustup /opt/emsdk /opt/uv;
 
 USER penpot
