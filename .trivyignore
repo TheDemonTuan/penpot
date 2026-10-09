@@ -1,0 +1,5 @@
+# CVE-2026-93687: braces AST recursive depth denial of service in @11ty/eleventy.
+# Upstream braces has no published release beyond 3.0.3 (issue #70 open/unfixed).
+# Scope is strictly docs static site generation documentation tooling.
+# Does not affect the 4 production runtime roles (frontend, backend, exporter, mcp).
+CVE-2026-93687
