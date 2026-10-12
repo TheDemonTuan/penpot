@@ -27,7 +27,7 @@ jobs:
           set -euo pipefail
           [[ "$GITHUB_REPOSITORY" == TheDemonTuan/penpot && "$GITHUB_REF" == refs/heads/main ]]
           [[ "$OPERATION" == status || "$OPERATION" == reconcile ]]
-      - uses: TheDemonTuan/vps-deploy/.github/actions/deploy@176252c826ac2f171404edaa57a56537b04348c5
+      - uses: TheDemonTuan/vps-deploy/.github/actions/deploy@224a5711f72399e4f0c989f7916de3b21d6dc58d
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
@@ -39,5 +39,5 @@ jobs:
           operation: ${{ inputs.operation }}
           component: app
           source-sha: ${{ github.sha }}
-          platform-ref: 176252c826ac2f171404edaa57a56537b04348c5
+          platform-ref: 224a5711f72399e4f0c989f7916de3b21d6dc58d
           config: .deploy/app.yml
