@@ -18,6 +18,14 @@
   io.prometheus/simpleclient_httpserver {:mvn/version "0.16.0"}
 
   io.lettuce/lettuce-core {:mvn/version "7.7.0.RELEASE"}
+  ;; Keep Lettuce and AWS on one patched Netty family; 4.2 splits the
+  ;; legacy codec jar, so aligning only handler/DNS leaves duplicate 4.1 APIs.
+  io.netty/netty-handler {:mvn/version "4.2.17.Final"}
+  io.netty/netty-resolver-dns {:mvn/version "4.2.17.Final"}
+  io.netty/netty-codec {:mvn/version "4.2.17.Final"}
+  io.netty/netty-codec-http2 {:mvn/version "4.2.17.Final"}
+  io.netty/netty-transport-classes-epoll {:mvn/version "4.2.17.Final"}
+
   ;; Minimal dependencies required by lettuce, we need to include them
   ;; explicitly because clojure dependency management does not support
   ;; yet the BOM format.
@@ -55,7 +63,7 @@
   org.jsoup/jsoup {:mvn/version "1.23.2"}
 
   at.yawk.lz4/lz4-java
-  {:mvn/version "1.11.2"}
+  {:mvn/version "1.11.4"}
 
   org.clojars.pntblnk/clj-ldap {:mvn/version "0.0.17"}
 

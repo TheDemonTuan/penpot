@@ -1,4 +1,4 @@
-FROM node:24.20.0-trixie@sha256:f7d34e58713740f9eef9092c0bd6ff10369d132f7238399a4b270f16d47fa608
+FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS runtime
 LABEL maintainer="Penpot <docker@penpot.app>"
 
 ENV LANG=en_US.UTF-8 \
@@ -7,13 +7,15 @@ ENV LANG=en_US.UTF-8 \
     PATH=/opt/imagick/bin:$PATH \
     PLAYWRIGHT_BROWSERS_PATH=/opt/penpot/browsers
 
+# Production runs the bundled app directly with Node; npm is build tooling.
+# Do not ship its unused dependency tree in the runtime image.
 RUN set -ex; \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx; \
     apt-get -qq update; \
     apt-get -qqy --no-install-recommends install passwd; \
     useradd -U -M -u 1001 -s /bin/false -d /opt/penpot penpot; \
     apt-get -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade; \
     apt-get -qqy --no-install-recommends install \
-      curl \
       tzdata \
       locales \
       ca-certificates \
@@ -85,9 +87,13 @@ RUN set -ex; \
     mkdir -p /opt/penpot; \
     chown -R penpot:penpot /opt/penpot;
 
+# Dependency installation needs the full Node build image (including git for
+# the pinned SVGO source), but none of its buildpack-deps belong in production.
+FROM node:24.20.0-trixie@sha256:f7d34e58713740f9eef9092c0bd6ff10369d132f7238399a4b270f16d47fa608 AS build
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/penpot/browsers
+
 ARG BUNDLE_PATH="./bundle-exporter/"
-COPY --chown=penpot:penpot $BUNDLE_PATH /opt/penpot/exporter/
-COPY --from=penpotapp/imagemagick:7.1.2-27 /opt/imagick /opt/imagick
+COPY $BUNDLE_PATH /opt/penpot/exporter/
 
 WORKDIR /opt/penpot/exporter
 
@@ -120,8 +126,14 @@ RUN set -eux; \
     pnpm --version;
 
 # `./setup` only needs pnpm on PATH (installed above as root).
-# Ownership is fixed right after.
-RUN ./setup && chown -R penpot:penpot /opt/penpot/exporter
+RUN ./setup
+
+FROM runtime AS image
+COPY --from=build --chown=penpot:penpot /opt/penpot/exporter /opt/penpot/exporter
+COPY --from=build --chown=penpot:penpot /opt/penpot/browsers /opt/penpot/browsers
+COPY --from=penpotapp/imagemagick:7.1.2-27 /opt/imagick /opt/imagick
+
+WORKDIR /opt/penpot/exporter
 
 USER penpot:penpot
 

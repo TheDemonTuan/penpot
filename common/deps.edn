@@ -23,8 +23,8 @@
   metosin/jsonista {:mvn/version "1.0.0"
                     :exclusions [com.fasterxml.jackson.core/jackson-core
                                  com.fasterxml.jackson.core/jackson-databind]}
-  com.fasterxml.jackson.core/jackson-core {:mvn/version "2.22.2"}
-  com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.22.2"}
+  com.fasterxml.jackson.core/jackson-core {:mvn/version "2.22.3"}
+  com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.22.3"}
 
 
   metosin/malli {:mvn/version "0.20.1"}
