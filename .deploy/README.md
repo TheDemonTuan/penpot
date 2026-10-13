@@ -84,6 +84,11 @@ Frontend retains nginx, bash, envsubst, curl and the Python log sanitizer.
 Exporter uses native ImageMagick/Poppler and keeps the existing font files;
 only font data/configuration crosses the Debian font stage, not its ELF libraries.
 The app/browser dependency builder remains separate from production.
+Use `nodejs-24`, not `nodejs-24-minimal`: Playwright imports `node:inspector`
+even without debugging enabled. The full Wolfi Node package removes bundled npm
+but preserves inspector support. Chromium also needs the separate `libudev`
+runtime package. Native AMD64 execution reproduced both missing dependencies;
+with them present, the real PNG/JPEG/WEBP/PPM pixel and PDF-merge smoke passes.
 
 Wolfi's stock X11/Xrender versions still need actual upstream fixes even if its
 scanner database omits those CVEs. `files/build-exporter-x11-backports.sh` builds

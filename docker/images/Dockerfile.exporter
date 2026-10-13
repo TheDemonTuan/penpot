@@ -51,7 +51,7 @@ RUN set -eux; \
       /tmp/x11-backports/libx11-1.8.13-r100.apk \
       /tmp/x11-backports/libxrender-0.9.12-r100.apk \
       'glibc-2.44>=2.44-r8' \
-      'nodejs-24-minimal>=24.21.0-r4' \
+      'nodejs-24>=24.21.0-r4' \
       'imagemagick-7>=7.1.2.33-r0' \
       'poppler-utils>=26.10.0-r0' \
       'libexpat1>=2.9.0-r0' \
@@ -60,6 +60,7 @@ RUN set -eux; \
       'libblkid>=2.42.4-r0' \
       'tiff>=4.7.2-r3' \
       'libsystemd>=261.3-r5' \
+      'libudev>=261.3-r5' \
       'ncurses>=6.6.20261010-r0' \
       tzdata \
       'glibc-2.44-locale-en>=2.44-r8' \
