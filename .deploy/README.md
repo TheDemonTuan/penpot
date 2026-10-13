@@ -59,12 +59,28 @@ dependency locks with the repository-pinned pnpm after updating affected package
 use frozen installs before building. Plugins use the workspace pnpm lock, not the
 removed, stale `plugins-runtime/package-lock.json`.
 
-`braces@3.0.3` remains blocked by `CVE-2026-93687`: no patched release exists at
-the time of this cutover. Stable Eleventy, nodemon and stylelint dependency chains
-still require it. Do not add an ignore, relabel a local patch as a fixed version,
-or replace the stable documentation toolchain with an unverified alpha release.
-A published fix or a verified compatible dependency migration is required before
-the full source/build/runtime/publication chain can pass.
+Source scanning passed in production candidate runs
+[38347637366](https://github.com/TheDemonTuan/penpot/actions/runs/38347637366) and
+[38355700333](https://github.com/TheDemonTuan/penpot/actions/runs/38355700333).
+Do not retain an older source-only blocker as the current deployment status.
+
+The latter candidate uses Jackson 2.22.3, LZ4 1.11.4 and aligned Netty 4.2.17
+libraries. Its backend image HIGH/CRITICAL scan passes. Exporter and MCP production
+stages use pinned Node slim images without unused npm/buildpack tooling; exporter
+setup and browser download remain in its full builder. Frontend removes unused
+nginx dynamic modules. Native six-service smoke, account/MCP/persistence checks,
+all 22 lifecycle cases and publication passed after these runtime changes.
+
+Production remains blocked: unchanged image scans report 79 frontend, 108 exporter
+and 43 MCP HIGH/CRITICAL Debian package findings; none has a fixed version in the
+scan report. Required runtime packages still have open Debian stable/security
+issues, including [Python 3.13](https://security-tracker.debian.org/tracker/source-package/python3.13)
+and [Expat](https://security-tracker.debian.org/tracker/source-package/expat).
+Current compatible ARM64 packages do not provide all required fixes. A digest
+published by the build is not an approved release while any image gate fails.
+Do not ignore unfixed findings, lower severity, deploy this candidate or claim
+production acceptance; require fixed packages or a verified compatible runtime
+migration followed by the full unchanged release gates.
 
 Devenv now runs as the mapped nonroot developer user after restricted ownership
 setup. Its TLS key is generated in the home volume, not shipped in the image;
