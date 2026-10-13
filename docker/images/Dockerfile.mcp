@@ -42,27 +42,28 @@ RUN set -eux; \
 RUN ./setup
 
 
-FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS image
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e AS image
 LABEL maintainer="Penpot <docker@penpot.app>"
 
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
-    PENPOT_MCP_SERVER_HOST=0.0.0.0
+    PENPOT_MCP_SERVER_HOST=0.0.0.0 \
+    PATH=/nodejs/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Setup runs in the full build image; production needs Node, not buildpack-deps.
-# Apply Debian security updates to the pinned runtime before copying the app.
-# npm is only build tooling; the runtime invokes Node directly.
-RUN set -eux; \
-    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx; \
-    apt-get -qq update; \
-    apt-get -qqy -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade; \
-    apt-get -qqy --no-install-recommends install ca-certificates; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
+# The supported Node 24 LTS runtime includes CA certificates and the glibc/C++
+# libraries required by sharp, but no package manager, shell or npm. Its dpkg
+# package metadata stays intact for vulnerability scanning.
+# Preserve the existing node account (UID/GID 1000), writable home and app tree.
+COPY --from=build /etc/passwd /etc/group /etc/
+COPY --from=build --chown=node:node /home/node /home/node
 
 COPY --from=build --chown=node:node /opt/penpot/mcp /opt/penpot/mcp
 
 WORKDIR /opt/penpot/mcp
 USER node
+
+# Clear distroless's Node entrypoint: callers and probes still invoke `node`
+# directly through PATH, and the original multi-user command remains unchanged.
+ENTRYPOINT []
 
 CMD ["node", "index.js", "--multi-user"]

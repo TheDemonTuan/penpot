@@ -71,16 +71,36 @@ setup and browser download remain in its full builder. Frontend removes unused
 nginx dynamic modules. Native six-service smoke, account/MCP/persistence checks,
 all 22 lifecycle cases and publication passed after these runtime changes.
 
-Production remains blocked: unchanged image scans report 79 frontend, 108 exporter
-and 43 MCP HIGH/CRITICAL Debian package findings; none has a fixed version in the
-scan report. Required runtime packages still have open Debian stable/security
-issues, including [Python 3.13](https://security-tracker.debian.org/tracker/source-package/python3.13)
-and [Expat](https://security-tracker.debian.org/tracker/source-package/expat).
-Current compatible ARM64 packages do not provide all required fixes. A digest
-published by the build is not an approved release while any image gate fails.
-Do not ignore unfixed findings, lower severity, deploy this candidate or claim
-production acceptance; require fixed packages or a verified compatible runtime
-migration followed by the full unchanged release gates.
+That candidate remains blocked: unchanged image scans report 79 frontend, 108
+exporter and 43 MCP HIGH/CRITICAL Debian package findings. An empty scanner
+FixedVersion is not proof that no upstream fix exists: current Debian tracker
+data already marks the installed librsvg version fixed for CVE-2026-96889.
+Most other retained Trixie findings remain open. A published digest is not an
+approved release while any image gate fails.
+
+The replacement runtime keeps backend unchanged and uses pinned multiarch
+Wolfi glibc for frontend/exporter and supported Node 24 distroless for MCP.
+Frontend retains nginx, bash, envsubst, curl and the Python log sanitizer.
+Exporter uses native ImageMagick/Poppler and keeps the existing font files;
+only font data/configuration crosses the Debian font stage, not its ELF libraries.
+The app/browser dependency builder remains separate from production.
+
+Wolfi's stock X11/Xrender versions still need actual upstream fixes even if its
+scanner database omits those CVEs. `files/build-exporter-x11-backports.sh` builds
+and signs truthful `1.8.13-r100` / `0.9.12-r100` APKs with pinned source archives
+and immutable upstream patches for CVE-2026-88806 / CVE-2026-88807. Packages retain
+their metadata and package-owned source/patch provenance; signing private keys
+never cross into production. Do not pretend these are unreleased upstream versions.
+
+Independent native AMD64 checks exercised frontend entrypoint/HTML serving and
+the actual signed backport build/install. Fresh Trivy checks found no
+HIGH/CRITICAL issues in the selected MCP base or frontend package closure.
+These checks do not authorize deployment: Wolfi is not an officially supported
+Playwright distro, so the full ARM64 app must prove browser rendering, PNG/JPEG/
+WEBP pixel correctness and two-page PDF merging in `.deploy/smoke-stack.py`,
+alongside lifecycle recovery and all unchanged source/image gates. Existing
+unprovisioned SVG tracing tools are not newly verified by this migration.
+Never ignore unfixed findings or lower severity to make this cutover pass.
 
 Devenv now runs as the mapped nonroot developer user after restricted ownership
 setup. Its TLS key is generated in the home volume, not shipped in the image;

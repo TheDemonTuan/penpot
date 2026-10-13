@@ -139,6 +139,45 @@ async function call(body, session) {
 })().catch(()=>process.exit(1));
 '''
 
+EXPORTER = r'''
+const {chromium}=require('playwright');
+const {mkdtempSync,readFileSync,rmSync}=require('node:fs');
+const {tmpdir}=require('node:os');
+const {join}=require('node:path');
+const {execFileSync}=require('node:child_process');
+(async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'penpot-export-smoke-'));
+  let browser;
+  try {
+    browser=await chromium.launch({args:['--allow-insecure-localhost','--font-render-hinting=none']});
+    const page=await browser.newPage({viewport:{width:64,height:64}});
+    await page.setContent('<style>html,body{margin:0;background:#ff0000} @page{size:64px 64px;margin:0}</style>');
+    const png=join(dir,'red.png'), jpg=join(dir,'red.jpg'), webp=join(dir,'red.webp'), ppm=join(dir,'red.ppm');
+    await page.screenshot({path:png,type:'png'});
+    await page.screenshot({path:jpg,type:'jpeg',quality:95});
+    execFileSync('convert',[png,'-quality','100','WEBP:'+webp]);
+    execFileSync('convert',[png,'PPM:'+ppm]);
+    for(const path of [png,jpg,webp,ppm]) {
+      const dimensions=execFileSync('identify',['-format','%wx%h',path]).toString();
+      if(dimensions!=='64x64')throw new Error('EXPORT_DIMENSIONS');
+      const pixel=execFileSync('convert',[path,'-crop','1x1+32+32','-depth','8','RGB:-']);
+      if(pixel.length!==3||pixel[0]<245||pixel[1]>10||pixel[2]>10)throw new Error('EXPORT_COLOR');
+    }
+    const first=join(dir,'one.pdf'),second=join(dir,'two.pdf'),merged=join(dir,'merged.pdf');
+    await page.pdf({path:first,printBackground:true,preferCSSPageSize:true});
+    await page.pdf({path:second,printBackground:true,preferCSSPageSize:true});
+    execFileSync('pdfunite',[first,second,merged]);
+    const info=execFileSync('pdfinfo',[merged]).toString();
+    if(!/^Pages:\s+2\s*$/m.test(info)||!readFileSync(merged).subarray(0,5).equals(Buffer.from('%PDF-')))
+      throw new Error('EXPORT_PDF');
+    console.log('EXPORT_RASTER_PDF_OK');
+  } finally {
+    if(browser)await browser.close();
+    rmSync(dir,{recursive:true,force:true});
+  }
+})().catch(()=>process.exit(1));
+'''
+
 
 def persistence(compose, scope):
     require(SCOPE.fullmatch(scope) is not None, 'SMOKE_SCOPE')
@@ -228,6 +267,9 @@ def smoke(compose_path):
             persistence(compose, scope)
             protocol = run(['docker', 'exec', '-i', scope + '-penpot-mcp', 'node'], data=MCP.encode(), timeout=60)
             require(protocol.strip() == b'MCP_INITIALIZE_TOOLS_OK', 'SMOKE_MCP_PROTOCOL')
+            exported = run(['docker', 'exec', '-i', scope + '-penpot-exporter', 'node'],
+                           data=EXPORTER.encode(), timeout=120)
+            require(exported.strip() == b'EXPORT_RASTER_PDF_OK', 'SMOKE_EXPORTER_RENDERING')
         finally:
             # Never use prune or remove external production volumes.
             run(compose + ['down', '--timeout', '30'], timeout=90)

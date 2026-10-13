@@ -1,91 +1,101 @@
-FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS runtime
-LABEL maintainer="Penpot <docker@penpot.app>"
-
-ENV LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
-    DEBIAN_FRONTEND=noninteractive \
-    PATH=/opt/imagick/bin:$PATH \
-    PLAYWRIGHT_BROWSERS_PATH=/opt/penpot/browsers
-
-# Production runs the bundled app directly with Node; npm is build tooling.
-# Do not ship its unused dependency tree in the runtime image.
-RUN set -ex; \
-    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx; \
-    apt-get -qq update; \
-    apt-get -qqy --no-install-recommends install passwd; \
-    useradd -U -M -u 1001 -s /bin/false -d /opt/penpot penpot; \
-    apt-get -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade; \
-    apt-get -qqy --no-install-recommends install \
-      tzdata \
-      locales \
-      ca-certificates \
-    ; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*; \
-    echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen; \
-    locale-gen; \
-    find /usr/share/i18n/locales/ -type f ! -name "en_US" ! -name "POSIX" ! -name "C" -delete;
-
-RUN set -ex; \
+# Preserve the existing font files and fallback rules, including Unifont and
+# Loma, rather than substituting font families during the runtime migration.
+# Only font data and fontconfig XML cross this stage; no Debian ELF files do.
+FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS fonts
+RUN set -eux; \
     apt-get -qq update; \
     apt-get -qqy --no-install-recommends install \
-      \
-      xvfb \
+      fontconfig \
       fonts-noto-color-emoji \
       fonts-unifont \
-      libfontconfig1 \
-      libfreetype6 \
       xfonts-cyrillic \
       xfonts-scalable \
       fonts-liberation \
       fonts-ipafont-gothic \
       fonts-wqy-zenhei \
       fonts-tlwg-loma-otf \
-      fonts-freefont-ttf \
-      poppler-utils \
-      \
-      libasound2 \
-      libatk-bridge2.0-0 \
-      libatk1.0-0 \
-      libatspi2.0-0 \
-      libcairo2 \
-      libcups2 \
-      libdbus-1-3 \
-      libdrm2 \
-      libgbm1 \
-      libglib2.0-0 \
-      libnspr4 \
-      libnss3 \
-      libpango-1.0-0 \
-      libx11-6 \
-      libxcb1 \
-      libxcomposite1 \
-      libxdamage1 \
-      libxext6 \
-      libxfixes3 \
-      libxkbcommon0 \
-      libxrandr2 \
-      \
-      libgomp1 \
-      libheif1 \
-      libjpeg62-turbo \
-      liblcms2-2 \
-      libopenexr-3-1-30 \
-      libopenjp2-7 \
-      libpng16-16 \
-      librsvg2-2 \
-      libtiff6 \
-      libwebp7 \
-      libwebpdemux2 \
-      libwebpmux3 \
-      libxml2 \
-      libzip5 \
-      libzstd1 \
-    ; \
+      fonts-freefont-ttf; \
     apt-get clean; \
-    rm -rf /var/lib/apt/lists/*; \
+    rm -rf /var/lib/apt/lists/*
+
+# Build the two not-yet-packaged Xorg security fixes on the target architecture.
+# Only signed APKs and their public key enter production; source checksums and
+# upstream patch commits remain installed as package-owned provenance.
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:256c88bb066424045021090932d50be93c8e3f2ce3586707702a401b146f3e43 AS x11-backports
+RUN set -eux; \
+    apk upgrade --no-cache; \
+    apk add --no-cache \
+      bash binutils coreutils gcc make pkgconf glibc-2.44-dev libxcrypt-dev \
+      libxcb-dev libx11-dev xorgproto xtrans-dev util-macros-dev \
+      curl patch gnutar gzip xz openssl-dev melange
+COPY files/build-exporter-x11-backports.sh /tmp/build-exporter-x11-backports.sh
+RUN bash /tmp/build-exporter-x11-backports.sh
+
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:256c88bb066424045021090932d50be93c8e3f2ce3586707702a401b146f3e43 AS runtime
+LABEL maintainer="Penpot <docker@penpot.app>"
+
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/penpot/browsers
+
+# Use one glibc distribution for Node, Chromium's native dependencies and
+# ImageMagick. The exporter requires PNG/JPEG screenshots, PNG-to-WEBP/PPM
+# conversion and pdfunite; it does not use the old artifact's EXR delegates
+# or an X server (Playwright launches Chromium headlessly).
+# Keep the APK database: dependency provenance must remain visible to scans.
+COPY --from=x11-backports /out/penpot-exporter-backports.rsa.pub /etc/apk/keys/penpot-exporter-backports.rsa.pub
+COPY --from=x11-backports /out/libx11-1.8.13-r100.apk /out/libxrender-0.9.12-r100.apk /tmp/x11-backports/
+RUN set -eux; \
+    apk upgrade --no-cache; \
+    apk add --no-cache \
+      /tmp/x11-backports/libx11-1.8.13-r100.apk \
+      /tmp/x11-backports/libxrender-0.9.12-r100.apk \
+      'glibc-2.44>=2.44-r8' \
+      'nodejs-24-minimal>=24.21.0-r4' \
+      'imagemagick-7>=7.1.2.33-r0' \
+      'poppler-utils>=26.10.0-r0' \
+      'libexpat1>=2.9.0-r0' \
+      'libxml2-16>=2.15.4-r1' \
+      'libmount>=2.42.4-r0' \
+      'libblkid>=2.42.4-r0' \
+      'tiff>=4.7.2-r3' \
+      'libsystemd>=261.3-r5' \
+      'ncurses>=6.6.20261010-r0' \
+      tzdata \
+      'glibc-2.44-locale-en>=2.44-r8' \
+      ca-certificates-bundle \
+      fontconfig \
+      freetype \
+      alsa-lib \
+      libatk-bridge-2.0 \
+      libatk-1.0 \
+      at-spi2-core \
+      cairo \
+      'cups-libs>=2.4.19-r4' \
+      dbus-libs \
+      libdrm-libs \
+      mesa-gbm \
+      glib \
+      libnspr \
+      libnss \
+      pango \
+      libxcb \
+      libxcomposite \
+      libxdamage \
+      libxext \
+      libxfixes \
+      libxkbcommon \
+      libxrandr; \
+    rm -rf /tmp/x11-backports; \
+    addgroup -S -g 1001 penpot; \
+    adduser -S -D -H -u 1001 -G penpot -h /opt/penpot -s /sbin/nologin penpot; \
     mkdir -p /opt/penpot; \
-    chown -R penpot:penpot /opt/penpot;
+    chown penpot:penpot /opt/penpot
+
+COPY --from=fonts /usr/share/fonts /usr/share/fonts
+COPY --from=fonts /etc/fonts /etc/fonts
+COPY --from=fonts /usr/share/fontconfig/conf.avail /usr/share/fontconfig/conf.avail
+RUN fc-cache -f
 
 # Dependency installation needs the full Node build image (including git for
 # the pinned SVGO source), but none of its buildpack-deps belong in production.
@@ -131,7 +141,6 @@ RUN ./setup
 FROM runtime AS image
 COPY --from=build --chown=penpot:penpot /opt/penpot/exporter /opt/penpot/exporter
 COPY --from=build --chown=penpot:penpot /opt/penpot/browsers /opt/penpot/browsers
-COPY --from=penpotapp/imagemagick:7.1.2-27 /opt/imagick /opt/imagick
 
 WORKDIR /opt/penpot/exporter
 
