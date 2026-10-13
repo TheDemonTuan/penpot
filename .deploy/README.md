@@ -134,8 +134,8 @@ resuming checkpoint so another crash cannot replay the dump over new writes.
 The transaction holds one app lock throughout its stages. Locked backups preserve
 the current source and generation, save their own recoverable intent, and retain
 seven complete snapshots plus operation references and previous-release sources.
-The root backup command, deploy/reconcile dispatch, and adoption are wired behind
-the same activation guard. The root-only offline restore command is implemented
+The root backup command, deploy/reconcile dispatch, and adoption use the
+four-image release engine. The root-only offline restore command is implemented
 with check/apply modes, a safety snapshot, and resumable checkpoints. It reports
 the restored data timestamp without exposing runtime secrets. App SSH reconcile
 cannot take over an offline restore operation. Before the exposure boundary,
@@ -149,19 +149,18 @@ no published ports or extra capabilities, exact volume mount modes and resource
 limits, owned isolated networks with only the expected members, and fresh
 frontend `200/OK` readiness. It compares runtime environment values against the
 pinned image defaults plus Compose, so extra SMTP settings or changed flags fail
-closed. These checks are covered by local fake-Docker tests, not native runtime
-proof. The root bootstrap now checks exact revisions, all four anonymous image
-refs, certificate hostname/trust/expiry, mounted edge configuration, query-log
+closed. Local boundary tests and the native ARM64 lifecycle harness cover these
+checks; approval requires source-bound proof from the exact release run.
+The root bootstrap checks exact revisions, all four anonymous image refs,
+certificate hostname/trust/expiry, mounted edge configuration and query-log
 policy, existing resources and shared route collisions. Its guarded apply path
 stages the immutable engine, preserves secrets on retry, creates owned storage,
 persists the internal edge attachment and starts the six services without builds.
 It publishes maintenance first, checks the candidate, then calls installer
 check/apply. Failed exposure acknowledgement closes the public route again.
-The same engine activation fence still blocks this apply path before any write;
-these local checks do not authorize production activation.
-
-Until the complete engine is ready, the controller rejects Penpot deployment and
-adoption with `PENPOT_RELEASE_ENGINE_NOT_READY`; it cannot fall back to blue-green. The six-service smoke stack and recovery tests remain.
+The preparation fence has been removed. Activation still requires the complete
+immutable release, successful lifecycle proof and all four image security gates;
+Penpot cannot fall back to the blue-green engine.
 The reusable platform workflow builds and smokes on native ARM64 without
 package-write permission. It transfers the exact tested images by a same-run
 artifact ID and checksum to a separate publication job. That job verifies all
@@ -209,11 +208,11 @@ pass image security gates before SSH deploy. Build, smoke and lifecycle proof
 still need to pass on a real runner; only immutable digests from that successful
 run may reach the deploy controller.
 
-Production still needs a verified native CI release, bootstrap and daily backup
-service installation, plus real container fault and offline restore tests. The platform has
-service/timer definitions for the 20:15 UTC daily backup. They are not installed
-or enabled on the VPS. Installer integration now renders the existing root-only
-wrapper with the verified engine release, action `backup`, and app `penpot`.
+Production activation requires verified native CI release evidence, bootstrap,
+public acceptance, a complete production backup and a private separate-VM restore.
+Installer integration installs service/timer definitions for the 20:15 UTC daily
+backup and renders the existing root-only wrapper with the verified engine
+release, action `backup`, and app `penpot`.
 It pauses an existing timer, rejects a running backup, and restores timer/files
 on installation failure. Successful enrollment also restores its prior timer
 state; fresh enrollment leaves it disabled/inactive until public readiness,
