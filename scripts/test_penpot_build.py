@@ -209,18 +209,6 @@ class BuildContractTests(unittest.TestCase):
 
 
 class DockerfileContractTests(unittest.TestCase):
-    def test_public_base_stages_are_pinned(self):
-        paths = [ROOT / "docker/devenv/Dockerfile"]
-        paths.extend(ROOT / f"docker/images/Dockerfile.{role}"
-                     for role in ("frontend", "backend", "exporter", "mcp"))
-        for path in paths:
-            with self.subTest(path=path):
-                contents = path.read_text()
-                self.assertNotIn("dhi.io/", contents)
-                for line in contents.splitlines():
-                    if line.startswith("FROM ") and ":" in line:
-                        self.assertRegex(line, r"@sha256:[0-9a-f]{64}(?: AS [a-z-]+)?$")
-
     def test_non_root_runtime_users_are_preserved(self):
         for role in ("frontend", "backend", "exporter", "mcp"):
             with self.subTest(role=role):

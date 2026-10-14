@@ -1,0 +1,127 @@
+name: "Fork: Backend behavioral verification"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'integrate/upstream-main-*'
+    paths:
+      - 'backend/**'
+      - 'common/**'
+      - 'docker/devenv/**'
+      - '.github/workflows/fork-backend.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TEST_IMAGE: penpot-backend-test:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  backend:
+    if: >-
+      github.repository == 'TheDemonTuan/penpot' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/integrate/upstream-main-'))
+    name: Native backend suite
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    services:
+      postgres:
+        # Immutable multi-platform index resolved from postgres:17.
+        image: postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+        env:
+          POSTGRES_USER: penpot_test
+          POSTGRES_PASSWORD: penpot_test
+          POSTGRES_DB: penpot_test
+        options: >-
+          --health-cmd "pg_isready -U penpot_test -d penpot_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        # Immutable multi-platform index resolved from valkey/valkey:9.
+        image: valkey/valkey@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Reject foreign repository, ref or architecture
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_ACTIONS" == true && "$GITHUB_REPOSITORY" == TheDemonTuan/penpot ]]
+          case "$GITHUB_REF" in
+            refs/heads/main|refs/heads/integrate/upstream-main-*) ;;
+            *) exit 1 ;;
+          esac
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ && "$(uname -m)" == aarch64 ]]
+          case "$(docker info --format '{{.Architecture}}')" in
+            arm64|aarch64) ;;
+            *) exit 1 ;;
+          esac
+      - name: Checkout exact source revision without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Bind verification to source revision
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          [[ -z "$(git status --porcelain --untracked-files=all)" ]]
+          mkdir -p "$RUNNER_TEMP/backend-verification"
+          printf 'source=%s\nref=%s\nrun=%s/%s\nplatform=linux/arm64\nsuite=clojure -M:dev:test\n' \
+            "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$RUNNER_TEMP/backend-verification/source.txt"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Build native local devenv from this source revision
+        run: |
+          set -euo pipefail
+          # Same source Dockerfile/native build method as .deploy/build-images.sh;
+          # never pull the mutable upstream penpotapp/devenv image.
+          docker buildx build --platform linux/arm64 --load \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$TEST_IMAGE" --file docker/devenv/Dockerfile docker/devenv
+          [[ "$(docker image inspect --format '{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$TEST_IMAGE")" == "arm64 $GITHUB_SHA" ]]
+      - name: Execute entire backend behavioral suite
+        env:
+          TEST_NETWORK: ${{ job.services.postgres.network }}
+          PENPOT_TEST_DATABASE_URI: postgresql://postgres/penpot_test
+          PENPOT_TEST_DATABASE_USERNAME: penpot_test
+          PENPOT_TEST_DATABASE_PASSWORD: penpot_test
+          PENPOT_TEST_REDIS_URI: redis://redis/1
+        run: |
+          set -euo pipefail
+          # No namespace filters: backend/tests.edn discovers every *-test,
+          # including objects/storage GC, restore-storage-objects, health and climit.
+          # Join the runner-owned service network; no database ports are exposed.
+          # Override the interactive devenv entrypoint and use the runner's UID,
+          # with a writable disposable HOME for Maven/Clojure dependency caches.
+          docker run --rm --init --network "$TEST_NETWORK" \
+            --user "$(id -u):$(id -g)" --entrypoint /bin/bash \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=/workspace" \
+            --workdir /workspace/backend --env HOME=/tmp/penpot-test-home \
+            --env JAVA_TOOL_OPTIONS=-Duser.home=/tmp/penpot-test-home \
+            --env PENPOT_TEST_DATABASE_URI --env PENPOT_TEST_DATABASE_USERNAME \
+            --env PENPOT_TEST_DATABASE_PASSWORD --env PENPOT_TEST_REDIS_URI \
+            "$TEST_IMAGE" -euo pipefail -c \
+            'mkdir -p "$HOME" /tmp/penpot; java -version; clojure -Sdescribe; exec clojure -M:dev:test' \
+            2>&1 | tee "$RUNNER_TEMP/backend-verification/backend-tests.log"
+      - name: Retain exact source identity and backend suite transcript
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backend-verification-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/backend-verification/
+          if-no-files-found: warn
+          retention-days: 14

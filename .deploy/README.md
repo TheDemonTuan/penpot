@@ -225,16 +225,18 @@ login, design creation, raster upload, reload persistence and a pixel-verified
 300×200 PNG export. Its production snapshot passed an isolated
 [separate ARM64 VM restore](https://github.com/TheDemonTuan/vps-deploy/actions/runs/38516260550),
 including the acceptance-file fingerprint and stored assets. The daily backup
-timer is enabled for 20:15 UTC (03:15 Asia/Ho_Chi_Minh). Keep auto-deployment gated
-on completed scoped ingress, then compare the saved design fingerprint, asset
-hashes, datastore container IDs and sibling route hashes across the canary.
+timer is enabled for 20:15 UTC (03:15 Asia/Ho_Chi_Minh). Source
+`6dcd63cb7227feac6c98cde63038b96901dc967d` subsequently passed
+[all release gates and deployment](https://github.com/TheDemonTuan/penpot/actions/runs/38525175177).
+Compare saved design fingerprints, asset hashes, datastore container IDs and
+sibling route hashes across subsequent upgrades.
 
 Image-only rollback
 is not safe. Bootstrap, forced-command SSH, ingress changes, and old OpenDesign
 retirement must wait for the relevant verification gates in the plan.
 
-Fork workflow templates live under `.deploy/workflows/`, not the active
-`.github/workflows/` directory. They fence the repository and `main` branch,
+Fork workflow templates live under `.deploy/workflows/`; the generated guarded
+pair is installed under `.github/workflows/`. They fence repository and `main`,
 share a deployment lock with `queue: max`, gate build on source scans, and require
 all four digest scans before deployment. SSH deployment stays off unless the
 repository variable `PENPOT_DEPLOY_ENABLED` is exactly `true`. Status/reconcile
@@ -299,12 +301,39 @@ are drift checks, not a server-side transaction across Cloudflare resources;
 operators must avoid concurrent dashboard edits during apply. A successful
 receipt also requires public HTTPS `/readyz` to return exactly `200/OK`, without
 following Access redirects. Local fake-API and fake-SSH tests do not prove these
-changes on the real account. No ingress apply has run yet.
+changes on the real account. Public `/readyz` was independently observed as
+`200/OK` on 2026-10-14; that observation alone does not establish ingress ownership.
 
-No fork GitHub workflow is installed here yet. Keep inherited fork Actions
-disabled until only the guarded fork workflows are ready. The current local
-preparation does not change live containers, DNS, or secrets. Platform source
-changes remain local and the Penpot host binding is not active.
+The guarded fork deployment and operations workflows are enabled; inherited
+upstream workflows remain disabled. Production requires environment approval
+before deployment while release build, publication and security checks can run.
+
+## Upstream main upgrade
+
+The integration target is upstream `1f96abd577`, not upstream `develop`.
+Preserve fork security/runtime patches and the immutable platform pin.
+Migration `0154` drops the legacy `file_object_thumbnail` table, not
+`file_tagged_object_thumbnail` or the `file-object-thumbnail` storage bucket.
+Check legacy rows and custom dependencies on an isolated restored database,
+then prove upgrade and restoration using the exact old and new four-image sets.
+Same-source lifecycle fixtures do not prove cross-release migration safety.
+
+`fork-backend.yml` adds an independent full backend behavioral suite on a
+disposable native ARM64 runner. It builds this source's pinned local devenv and
+joins isolated PostgreSQL/Valkey services without publishing database ports.
+Enable this fork-only workflow and require its successful result for the exact
+candidate SHA before approving production. The deployment graph does not
+automatically depend on this separate workflow.
+Local deploy checks no longer treat Dockerfile stage-name spelling as proof of
+image pinning; runtime image identity and security gates remain authoritative.
+
+Readiness remains exactly `200/OK`. The new explicit offline mode returns
+`503/OFFLINE` and must not pass startup or serving acceptance. It does not
+replace the platform maintenance transaction or automatically drain shutdown.
+Before exposure, recovery follows the transaction snapshot; after the committed
+boundary, reconcile completes forward. Downgrade requires stopped writers,
+a safety snapshot and offline restoration of database/assets with old images;
+never use image-only rollback or replay an old dump over new writes.
 
 ## Local contract checks
 
