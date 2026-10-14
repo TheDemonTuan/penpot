@@ -217,6 +217,18 @@ It pauses an existing timer, rejects a running backup, and restores timer/files
 on installation failure. Successful enrollment also restores its prior timer
 state; fresh enrollment leaves it disabled/inactive until public readiness,
 a complete production backup and a private ARM64 restore rehearsal pass.
+
+Production acceptance evidence (2026-10-14): the initial immutable ARM64 release
+passed [source/build/lifecycle/provenance and four image security gates](https://github.com/TheDemonTuan/penpot/actions/runs/38393720596).
+Public browser/MCP acceptance at `https://design.tuannguyenviet.site` covered
+login, design creation, raster upload, reload persistence and a pixel-verified
+300×200 PNG export. Its production snapshot passed an isolated
+[separate ARM64 VM restore](https://github.com/TheDemonTuan/vps-deploy/actions/runs/38516260550),
+including the acceptance-file fingerprint and stored assets. The daily backup
+timer is enabled for 20:15 UTC (03:15 Asia/Ho_Chi_Minh). Keep auto-deployment gated
+on completed scoped ingress, then compare the saved design fingerprint, asset
+hashes, datastore container IDs and sibling route hashes across the canary.
+
 Image-only rollback
 is not safe. Bootstrap, forced-command SSH, ingress changes, and old OpenDesign
 retirement must wait for the relevant verification gates in the plan.
